@@ -314,9 +314,12 @@ CUDA 示例：
   --backend cuda \
   --voice-dir ./runtime/voices \
   --max-queue 8 \
+  --max-decode-steps 512 \
   --output-sample-rate 24000 \
   --disable-auth
 ```
+
+服务长文本时可以设置 `--max-decode-steps`。不设置或设为 `0` 时，服务端会继续使用保守的后端默认 decode 预算。
 
 CPU 示例：
 
@@ -330,6 +333,7 @@ CPU 示例：
   --backend cpu \
   --voice-dir ./runtime/voices \
   --max-queue 8 \
+  --max-decode-steps 512 \
   --output-sample-rate 24000 \
   --disable-auth
 ```

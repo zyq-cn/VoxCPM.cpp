@@ -314,9 +314,12 @@ CUDA example:
   --backend cuda \
   --voice-dir ./runtime/voices \
   --max-queue 8 \
+  --max-decode-steps 512 \
   --output-sample-rate 24000 \
   --disable-auth
 ```
+
+Use `--max-decode-steps` when serving long text. If omitted or set to `0`, the server keeps the conservative per-backend default decode budget.
 
 CPU example:
 
@@ -330,6 +333,7 @@ CPU example:
   --backend cpu \
   --voice-dir ./runtime/voices \
   --max-queue 8 \
+  --max-decode-steps 512 \
   --output-sample-rate 24000 \
   --disable-auth
 ```

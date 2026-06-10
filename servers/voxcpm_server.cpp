@@ -29,6 +29,7 @@ struct Options {
     int threads = 4;
     int max_queue = 8;
     int output_sample_rate = 0;
+    int max_decode_steps = 0;
     bool disable_auth = false;
 };
 
@@ -85,6 +86,8 @@ Options parse_args(int argc, char** argv) {
             options.max_queue = std::stoi(require_value("--max-queue"));
         } else if (arg == "--output-sample-rate") {
             options.output_sample_rate = std::stoi(require_value("--output-sample-rate"));
+        } else if (arg == "--max-decode-steps") {
+            options.max_decode_steps = std::stoi(require_value("--max-decode-steps"));
         } else if (arg == "--help" || arg == "-h") {
             std::cout
                 << "Usage: voxcpm-server --model-path MODEL.gguf --model-name NAME --voice-dir DIR [options]\n"
@@ -94,6 +97,7 @@ Options parse_args(int argc, char** argv) {
                 << "  --backend TYPE        cpu|cuda|vulkan|auto\n"
                 << "  --threads N           Default: 4\n"
                 << "  --max-queue N         Default: 8\n"
+                << "  --max-decode-steps N  Override per-request decode step cap, 0 keeps backend default\n"
                 << "  --output-sample-rate HZ  Optional output resample rate before encoding\n"
                 << "  --api-key KEY         Required unless --disable-auth\n"
                 << "  --disable-auth\n";
@@ -111,6 +115,9 @@ Options parse_args(int argc, char** argv) {
     if (options.threads < 1) fail("--threads must be >= 1");
     if (options.max_queue < 0) fail("--max-queue must be >= 0");
     if (options.output_sample_rate < 0) fail("--output-sample-rate must be >= 0");
+    if (options.max_decode_steps < 0 || options.max_decode_steps > 2000) {
+        fail("--max-decode-steps must be between 0 and 2000");
+    }
     return options;
 }
 
@@ -441,6 +448,7 @@ int main(int argc, char** argv) {
                     SynthesisRequest request;
                     request.text = ctx.input;
                     request.prompt = std::move(prompt);
+                    request.max_decode_steps = options.max_decode_steps;
                     request.chunk_callback = [&](const std::vector<float>& chunk_waveform) {
                         const std::vector<float> prepared = prepare_response_waveform(chunk_waveform,
                                                                                       core.sample_rate(),
@@ -474,6 +482,7 @@ int main(int argc, char** argv) {
                 SynthesisRequest request;
                 request.text = ctx.input;
                 request.prompt = std::move(prompt);
+                request.max_decode_steps = options.max_decode_steps;
                 SynthesisResult result = core.synthesize(request);
                 result.waveform = prepare_response_waveform(std::move(result.waveform),
                                                             result.sample_rate,

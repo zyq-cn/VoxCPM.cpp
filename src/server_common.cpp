@@ -558,6 +558,17 @@ int decode_step_cap_for_service(BackendType backend_type, int seq_len) {
     return seq_len > kLongSeqThreshold ? 64 : (seq_len > kShortSeqThreshold ? 96 : 128);
 }
 
+int decode_step_budget_for_request(const SynthesisRequest& request, BackendType backend_type, int seq_len) {
+    constexpr int kMaxDecodeSteps = 2000;
+    if (request.max_decode_steps < 0) {
+        fail("max_decode_steps must be >= 0");
+    }
+    const int service_cap = request.max_decode_steps > 0
+                                ? request.max_decode_steps
+                                : decode_step_cap_for_service(backend_type, seq_len);
+    return std::min(service_cap, kMaxDecodeSteps);
+}
+
 bool should_use_output_pool_timeline(const VoxCPMDecodeState& state, bool has_reference_audio, int seq_len) {
     constexpr int kOutputPoolSeqLimit = 256;
     return state.output_pool != nullptr && state.output_pool->is_initialized() && !has_reference_audio &&
@@ -976,10 +987,15 @@ SynthesisResult VoxCPMServiceCore::synthesize_locked(const SynthesisRequest& req
     const int prompt_audio_length = request.prompt.prompt_audio_length;
     const int target_text_token_count =
         std::max<int>(1, static_cast<int>(split_tokenizer_->tokenize(effective_text).size()));
-    const int hard_max_len = decode_step_cap_for_service(backend_type_, seq_len);
-    const int max_len = std::min({static_cast<int>(target_text_token_count * request.retry_badcase_ratio_threshold + 10.0f),
-                                  hard_max_len,
-                                  2000});
+    const int natural_max_len =
+        std::min(static_cast<int>(target_text_token_count * request.retry_badcase_ratio_threshold + 10.0f), 2000);
+    const int decode_step_budget = decode_step_budget_for_request(request, backend_type_, seq_len);
+    const int max_len = std::min(natural_max_len, decode_step_budget);
+    std::cerr << "[tts] decode budget natural_max_len=" << natural_max_len
+              << " service_cap=" << decode_step_budget
+              << " max_len=" << max_len
+              << (request.max_decode_steps > 0 ? " override=1" : " override=0")
+              << "\n";
     constexpr int kMinLen = 2;
     const int max_attempts = retry_badcase ? std::max(1, request.retry_badcase_max_times) : 1;
 
@@ -1082,16 +1098,17 @@ SynthesisResult VoxCPMServiceCore::synthesize_locked(const SynthesisRequest& req
                 break;
             }
         }
-        std::cerr << "[tts] decode loop done generated_frames="
-                  << (use_output_pool_timeline
-                          ? std::max(0, state.audio_frame_count - prompt_audio_length)
-                          : static_cast<int>(generated_steps.size() / frame_stride))
-                  << " attempt=" << (attempt + 1)
-                  << "\n";
-
         const int generated_frames = use_output_pool_timeline
                                          ? std::max(0, state.audio_frame_count - prompt_audio_length)
                                          : static_cast<int>(generated_steps.size() / frame_stride);
+        std::cerr << "[tts] decode loop done generated_frames="
+                  << generated_frames
+                  << " attempt=" << (attempt + 1)
+                  << "\n";
+        if (generated_frames >= max_len && decode_step_budget < natural_max_len) {
+            std::cerr << "[tts] decode step budget reached before stop token; increase --max-decode-steps "
+                         "if the output is truncated.\n";
+        }
         if (retry_badcase &&
             generated_frames >= static_cast<int>(target_text_token_count * request.retry_badcase_ratio_threshold) &&
             attempt + 1 < max_attempts) {

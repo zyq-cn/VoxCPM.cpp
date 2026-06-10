@@ -50,6 +50,7 @@ struct SynthesisRequest {
     bool retry_badcase = false;
     int retry_badcase_max_times = 3;
     float retry_badcase_ratio_threshold = 6.0f;
+    int max_decode_steps = 0;
     std::function<void(const std::vector<float>&)> chunk_callback;
 };
 

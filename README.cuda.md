@@ -123,9 +123,12 @@ Start the OpenAI-compatible server:
   --backend cuda \
   --voice-dir ./runtime/voices \
   --max-queue 8 \
+  --max-decode-steps 512 \
   --output-sample-rate 24000 \
   --disable-auth
 ```
+
+For long text, set `--max-decode-steps` high enough for the expected output length. Leaving it unset or using `0` keeps the conservative CUDA service defaults.
 
 Register a voice:
 
@@ -198,6 +201,9 @@ cmake --build build-cuda -j8
 - If an OpenAI-compatible client assumes 24 kHz PCM playback, start `voxcpm-server` with `--output-sample-rate 24000`.
   - `pcm` responses have no embedded sample-rate header, so the server-side output rate must match the client expectation.
   - The same override also applies to `wav`, `mp3`, and `opus`.
+- If long requests always stop at the same `generated_frames` value, increase `--max-decode-steps`.
+  - The default CUDA service budget is intentionally conservative to bound latency and memory.
+  - For example, `--max-decode-steps 512` allows longer synthesis while still keeping a fixed upper bound.
 
 ## Minimal checklist
 
