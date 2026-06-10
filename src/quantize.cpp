@@ -185,6 +185,13 @@ bool is_audio_vae_unused_weight(const std::string& name) {
     return name == "audio_vae.encoder.fc_logvar.weight";
 }
 
+bool is_audio_vae_sr_cond_embedding_weight(const std::string& name) {
+    return has_prefix(name, "audio_vae.decoder.sr_cond_model.") &&
+           (has_suffix(name, ".scale_embed.weight") ||
+            has_suffix(name, ".bias_embed.weight") ||
+            has_suffix(name, ".cond_embed.weight"));
+}
+
 bool is_audio_vae_depthwise_weight(const ggml_tensor* tensor, const std::string& name) {
     return is_audio_vae_weight_name(name) &&
            ggml_n_dims(tensor) == 3 &&
@@ -311,6 +318,9 @@ ggml_type choose_audio_vae_target_type(const ggml_tensor* tensor,
         return GGML_TYPE_F16;
     }
     if (is_audio_vae_unused_weight(name)) {
+        return GGML_TYPE_F16;
+    }
+    if (is_audio_vae_sr_cond_embedding_weight(name)) {
         return GGML_TYPE_F16;
     }
     if (is_audio_vae_depthwise_weight(tensor, name) || is_audio_vae_transpose_conv_weight(name)) {

@@ -26,6 +26,9 @@ struct SampleModelData {
     std::vector<float> audio_vae_small_conv;
     std::vector<float> audio_vae_depthwise;
     std::vector<float> audio_vae_transpose_conv;
+    std::vector<float> audio_vae_sr_scale_embed;
+    std::vector<float> audio_vae_sr_bias_embed;
+    std::vector<float> audio_vae_sr_cond_embed;
     std::vector<float> audio_vae_bias;
     std::vector<float> audio_vae_alpha;
     std::vector<int32_t> audio_vae_sr_bin_boundaries;
@@ -106,6 +109,9 @@ void write_sample_quantize_model(const std::filesystem::path& path, SampleModelD
     sample->audio_vae_small_conv.resize(7 * 1 * 2);
     sample->audio_vae_depthwise.resize(7 * 1 * 2);
     sample->audio_vae_transpose_conv.resize(4 * 2 * 4);
+    sample->audio_vae_sr_scale_embed.resize(256 * 4);
+    sample->audio_vae_sr_bias_embed.resize(256 * 4);
+    sample->audio_vae_sr_cond_embed.resize(256 * 4);
     sample->audio_vae_bias.resize(2);
     sample->audio_vae_alpha.resize(2);
     sample->audio_vae_sr_bin_boundaries = {20000, 30000, 40000};
@@ -122,6 +128,9 @@ void write_sample_quantize_model(const std::filesystem::path& path, SampleModelD
     fill_sequential(&sample->audio_vae_small_conv, 6.0f);
     fill_sequential(&sample->audio_vae_depthwise, 7.0f);
     fill_sequential(&sample->audio_vae_transpose_conv, 8.0f);
+    fill_sequential(&sample->audio_vae_sr_scale_embed, 8.2f);
+    fill_sequential(&sample->audio_vae_sr_bias_embed, 8.4f);
+    fill_sequential(&sample->audio_vae_sr_cond_embed, 8.6f);
     fill_sequential(&sample->audio_vae_bias, 9.0f);
     fill_sequential(&sample->audio_vae_alpha, 10.0f);
     fill_sequential(&sample->locenc_special_token, 6.0f);
@@ -193,6 +202,27 @@ void write_sample_quantize_model(const std::filesystem::path& path, SampleModelD
         sample->audio_vae_transpose_conv.data(),
         sample->audio_vae_transpose_conv.size() * sizeof(float));
 
+    ggml_tensor* audio_vae_sr_scale_embed = ggml_new_tensor_2d(tensor_ctx, GGML_TYPE_F32, 256, 4);
+    ggml_set_name(audio_vae_sr_scale_embed, "audio_vae.decoder.sr_cond_model.2.scale_embed.weight");
+    std::memcpy(
+        audio_vae_sr_scale_embed->data,
+        sample->audio_vae_sr_scale_embed.data(),
+        sample->audio_vae_sr_scale_embed.size() * sizeof(float));
+
+    ggml_tensor* audio_vae_sr_bias_embed = ggml_new_tensor_2d(tensor_ctx, GGML_TYPE_F32, 256, 4);
+    ggml_set_name(audio_vae_sr_bias_embed, "audio_vae.decoder.sr_cond_model.2.bias_embed.weight");
+    std::memcpy(
+        audio_vae_sr_bias_embed->data,
+        sample->audio_vae_sr_bias_embed.data(),
+        sample->audio_vae_sr_bias_embed.size() * sizeof(float));
+
+    ggml_tensor* audio_vae_sr_cond_embed = ggml_new_tensor_2d(tensor_ctx, GGML_TYPE_F32, 256, 4);
+    ggml_set_name(audio_vae_sr_cond_embed, "audio_vae.decoder.sr_cond_model.2.cond_embed.weight");
+    std::memcpy(
+        audio_vae_sr_cond_embed->data,
+        sample->audio_vae_sr_cond_embed.data(),
+        sample->audio_vae_sr_cond_embed.size() * sizeof(float));
+
     ggml_tensor* audio_vae_bias = ggml_new_tensor_1d(tensor_ctx, GGML_TYPE_F32, 2);
     ggml_set_name(audio_vae_bias, "audio_vae.encoder.block.0.bias");
     std::memcpy(audio_vae_bias->data, sample->audio_vae_bias.data(), sample->audio_vae_bias.size() * sizeof(float));
@@ -238,6 +268,9 @@ void write_sample_quantize_model(const std::filesystem::path& path, SampleModelD
     gguf_add_tensor(gguf_ctx, audio_vae_small_conv);
     gguf_add_tensor(gguf_ctx, audio_vae_depthwise);
     gguf_add_tensor(gguf_ctx, audio_vae_transpose_conv);
+    gguf_add_tensor(gguf_ctx, audio_vae_sr_scale_embed);
+    gguf_add_tensor(gguf_ctx, audio_vae_sr_bias_embed);
+    gguf_add_tensor(gguf_ctx, audio_vae_sr_cond_embed);
     gguf_add_tensor(gguf_ctx, audio_vae_bias);
     gguf_add_tensor(gguf_ctx, audio_vae_alpha);
     gguf_add_tensor(gguf_ctx, audio_vae_sr_bin_boundaries);
@@ -274,11 +307,11 @@ TEST_CASE("quantize_gguf applies VoxCPM tensor mapping policy", "[quantize]") {
     QuantizeStats stats;
     REQUIRE(quantize_gguf(options, &stats));
 
-    REQUIRE(stats.total_tensors == 15);
-    REQUIRE(stats.quantized_tensors == 10);
-    REQUIRE(stats.audio_vae_tensors == 8);
+    REQUIRE(stats.total_tensors == 18);
+    REQUIRE(stats.quantized_tensors == 13);
+    REQUIRE(stats.audio_vae_tensors == 11);
     REQUIRE(stats.audio_vae_quantized_tensors == 1);
-    REQUIRE(stats.audio_vae_f16_tensors == 4);
+    REQUIRE(stats.audio_vae_f16_tensors == 7);
     REQUIRE(stats.audio_vae_preserved_tensors == 3);
 
     VoxCPMBackend backend(BackendType::CPU, 2);
@@ -309,6 +342,9 @@ TEST_CASE("quantize_gguf applies VoxCPM tensor mapping policy", "[quantize]") {
     REQUIRE(store.get_tensor("audio_vae.encoder.block.0.weight")->type == GGML_TYPE_F16);
     REQUIRE(store.get_tensor("audio_vae.decoder.model.0.weight")->type == GGML_TYPE_F16);
     REQUIRE(store.get_tensor("audio_vae.decoder.model.2.block.1.weight")->type == GGML_TYPE_F16);
+    REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.scale_embed.weight")->type == GGML_TYPE_F16);
+    REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.bias_embed.weight")->type == GGML_TYPE_F16);
+    REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.cond_embed.weight")->type == GGML_TYPE_F16);
     REQUIRE(store.get_tensor("audio_vae.encoder.block.0.bias")->type == GGML_TYPE_F32);
     REQUIRE(store.get_tensor("audio_vae.decoder.model.2.block.0.alpha")->type == GGML_TYPE_F32);
     REQUIRE(store.get_tensor("audio_vae.decoder.sr_bin_boundaries")->type == GGML_TYPE_I32);
@@ -347,9 +383,9 @@ TEST_CASE("quantize_gguf supports forcing AudioVAE weights to F16", "[quantize]"
     QuantizeStats stats;
     REQUIRE(quantize_gguf(options, &stats));
 
-    REQUIRE(stats.audio_vae_tensors == 8);
+    REQUIRE(stats.audio_vae_tensors == 11);
     REQUIRE(stats.audio_vae_quantized_tensors == 0);
-    REQUIRE(stats.audio_vae_f16_tensors == 5);
+    REQUIRE(stats.audio_vae_f16_tensors == 8);
     REQUIRE(stats.audio_vae_preserved_tensors == 3);
 
     VoxCPMBackend backend(BackendType::CPU, 2);
@@ -371,6 +407,18 @@ TEST_CASE("quantize_gguf supports forcing AudioVAE weights to F16", "[quantize]"
     const ggml_tensor* decoder_transpose = store.get_tensor("audio_vae.decoder.model.2.block.1.weight");
     REQUIRE(decoder_transpose != nullptr);
     REQUIRE(decoder_transpose->type == GGML_TYPE_F16);
+
+    const ggml_tensor* sr_scale_embed = store.get_tensor("audio_vae.decoder.sr_cond_model.2.scale_embed.weight");
+    REQUIRE(sr_scale_embed != nullptr);
+    REQUIRE(sr_scale_embed->type == GGML_TYPE_F16);
+
+    const ggml_tensor* sr_bias_embed = store.get_tensor("audio_vae.decoder.sr_cond_model.2.bias_embed.weight");
+    REQUIRE(sr_bias_embed != nullptr);
+    REQUIRE(sr_bias_embed->type == GGML_TYPE_F16);
+
+    const ggml_tensor* sr_cond_embed = store.get_tensor("audio_vae.decoder.sr_cond_model.2.cond_embed.weight");
+    REQUIRE(sr_cond_embed != nullptr);
+    REQUIRE(sr_cond_embed->type == GGML_TYPE_F16);
 
     const ggml_tensor* encoder_bias = store.get_tensor("audio_vae.encoder.block.0.bias");
     REQUIRE(encoder_bias != nullptr);
@@ -469,6 +517,9 @@ TEST_CASE("quantize_gguf supports IQ presets and imatrix-gated types", "[quantiz
         REQUIRE(store.get_tensor("residual_lm.blk.7.attn_v.weight")->type == expected_attn_v);
         REQUIRE(store.get_tensor("audio_vae.encoder.block.1.block.0.block.3.weight")->type == expected_blk_attn_q);
         REQUIRE(store.get_tensor("audio_vae.encoder.block.0.weight")->type == GGML_TYPE_F16);
+        REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.scale_embed.weight")->type == GGML_TYPE_F16);
+        REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.bias_embed.weight")->type == GGML_TYPE_F16);
+        REQUIRE(store.get_tensor("audio_vae.decoder.sr_cond_model.2.cond_embed.weight")->type == GGML_TYPE_F16);
 
         if (!maybe_imatrix.empty()) {
             std::string imatrix_file;
