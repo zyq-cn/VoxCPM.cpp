@@ -397,7 +397,8 @@ private:
                                                     MiniCPMKVCache& residual_kv_cache,
                                                     bool is_causal,
                                                     ggml_tensor* lm_hidden_dst,
-                                                    ggml_tensor* residual_hidden_dst);
+                                                    ggml_tensor* residual_hidden_dst,
+                                                    int n_past);
     void run_prefill_hidden_states_from_input_tensors_into(ggml_tensor* combined_embed_src,
                                                            ggml_tensor* text_mask_src,
                                                            ggml_tensor* feat_mask_src,

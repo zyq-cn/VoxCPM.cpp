@@ -106,7 +106,8 @@ public:
                          MiniCPMKVCache& kv_cache,
                          bool is_causal = true,
                          bool write_kv_cache = true,
-                         ggml_tensor* attention_mask = nullptr);
+                         ggml_tensor* attention_mask = nullptr,
+                         int n_past = 0);
 
     ggml_tensor* forward_step(VoxCPMContext& ctx,
                               ggml_tensor* input,
