@@ -825,7 +825,7 @@ ggml_tensor* MiniCPMModel::forward(VoxCPMContext& ctx,
     }
 
     ggml_tensor* hidden = input;
-    ggml_tensor* causal_mask = is_causal ? create_causal_mask(raw, positions, n_tokens) : nullptr;
+    ggml_tensor* causal_mask = is_causal ? create_causal_mask(raw, positions, n_past + n_tokens) : nullptr;
     for (int i = 0; i < config_.n_layer; ++i) {
         hidden = layer_forward(raw, hidden, positions, causal_mask, attention_mask, weights_.layers[i], kv_cache, i, n_tokens, n_past, is_causal, write_kv_cache);
     }
