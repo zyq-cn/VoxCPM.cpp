@@ -31,6 +31,7 @@ struct Options {
     int max_attempts = 3;
     int output_sample_rate = 0;
     int max_decode_steps = 0;
+    int inference_timesteps = 10;
     bool disable_auth = false;
 };
 
@@ -92,6 +93,8 @@ Options parse_args(int argc, char** argv) {
             options.output_sample_rate = std::stoi(require_value("--output-sample-rate"));
         } else if (arg == "--max-decode-steps") {
             options.max_decode_steps = std::stoi(require_value("--max-decode-steps"));
+        } else if (arg == "--inference-timesteps") {
+            options.inference_timesteps = std::stoi(require_value("--inference-timesteps"));
         } else if (arg == "--help" || arg == "-h") {
             std::cout
                 << "Usage: voxcpm-server --model-path MODEL.gguf --model-name NAME --voice-dir DIR [options]\n"
@@ -103,6 +106,7 @@ Options parse_args(int argc, char** argv) {
                 << "  --max-queue N         Default: 8\n"
                 << "  --max-attempts N      Default: 3\n"
                 << "  --max-decode-steps N  Override per-request decode step cap, 0 keeps backend default\n"
+                << "  --inference-timesteps N  Diffusion steps per chunk. Default: 10. Lower is faster\n"
                 << "  --output-sample-rate HZ  Optional output resample rate before encoding\n"
                 << "  --api-key KEY         Required unless --disable-auth\n"
                 << "  --disable-auth\n";
@@ -123,6 +127,9 @@ Options parse_args(int argc, char** argv) {
     if (options.output_sample_rate < 0) fail("--output-sample-rate must be >= 0");
     if (options.max_decode_steps < 0 || options.max_decode_steps > 2000) {
         fail("--max-decode-steps must be between 0 and 2000");
+    }
+    if (options.inference_timesteps < 1 || options.inference_timesteps > 100) {
+        fail("--inference-timesteps must be between 1 and 100");
     }
     return options;
 }
@@ -464,6 +471,7 @@ int main(int argc, char** argv) {
                     request.text = ctx.input;
                     request.prompt = std::move(prompt);
                     request.max_decode_steps = options.max_decode_steps;
+                    request.inference_timesteps = options.inference_timesteps;
                     request.chunk_callback = [&](const std::vector<float>& chunk_waveform) {
                         const std::vector<float> prepared = prepare_response_waveform(chunk_waveform,
                                                                                       core.sample_rate(),
@@ -498,6 +506,7 @@ int main(int argc, char** argv) {
                 request.text = ctx.input;
                 request.prompt = std::move(prompt);
                 request.max_decode_steps = options.max_decode_steps;
+                request.inference_timesteps = options.inference_timesteps;
                 request.retry_badcase = (ctx.max_attempts == 1 ? false : true);
                 request.retry_badcase_max_times = std::min(ctx.max_attempts, options.max_attempts);
                 SynthesisResult result = core.synthesize(request);
