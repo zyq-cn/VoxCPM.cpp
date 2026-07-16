@@ -1575,7 +1575,8 @@ void VoxCPMRuntime::run_prefill_hidden_states_from_tensor_into(ggml_tensor* comb
                                                                MiniCPMKVCache& residual_kv_cache,
                                                                bool is_causal,
                                                                ggml_tensor* lm_hidden_dst,
-                                                               ggml_tensor* residual_hidden_dst) {
+                                                               ggml_tensor* residual_hidden_dst,
+                                                               int n_past = 0) {
     VOXCPM_ASSERT(backend_ != nullptr);
     VOXCPM_ASSERT(combined_embed_src != nullptr);
     VOXCPM_ASSERT(lm_hidden_dst != nullptr);
@@ -1592,7 +1593,7 @@ void VoxCPMRuntime::run_prefill_hidden_states_from_tensor_into(ggml_tensor* comb
     ggml_set_input(text_mask_tensor);
     ggml_set_input(feat_mask_tensor);
 
-    ggml_tensor* base_output = base_lm_.forward(base_ctx, embed_tensor, nullptr, base_kv_cache, is_causal);
+    ggml_tensor* base_output = base_lm_.forward(base_ctx, embed_tensor, nullptr, base_kv_cache, is_causal, true, nullptr, n_past);
     ggml_tensor* fsq_out = fsq_layer_.forward(base_ctx, base_output);
     ggml_tensor* text_mask_2d = ggml_reshape_2d(base_raw, text_mask_tensor, 1, seq_len);
     ggml_tensor* feat_mask_2d = ggml_reshape_2d(base_raw, feat_mask_tensor, 1, seq_len);
@@ -1633,7 +1634,10 @@ void VoxCPMRuntime::run_prefill_hidden_states_from_tensor_into(ggml_tensor* comb
                                                         residual_input_tensor,
                                                         nullptr,
                                                         residual_kv_cache,
-                                                        is_causal);
+                                                        is_causal,
+                                                        true,
+                                                        nullptr,
+                                                        n_past);
     ggml_tensor* residual_last = ggml_view_1d(residual_raw,
                                               residual_output,
                                               residual_lm_.config().hidden_size,
@@ -2340,7 +2344,8 @@ VoxCPMDecodeState VoxCPMRuntime::prefill_impl(const std::vector<int32_t>& text,
                                                            *state.residual_lm_cache,
                                                            true,
                                                            state.persistent_state->lm_hidden(),
-                                                           state.persistent_state->residual_hidden());
+                                                           state.persistent_state->residual_hidden(),
+                                                           chunk_start);
                 backend_->free_buffer(combined_buffer);
                 reset_request_state();
             }

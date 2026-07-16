@@ -812,7 +812,8 @@ ggml_tensor* MiniCPMModel::forward(VoxCPMContext& ctx,
                                    MiniCPMKVCache& kv_cache,
                                    bool is_causal,
                                    bool write_kv_cache,
-                                   ggml_tensor* attention_mask) {
+                                   ggml_tensor* attention_mask,
+                                   int n_past) {
     VOXCPM_ASSERT(input != nullptr);
     VOXCPM_ASSERT(is_causal || attention_mask == nullptr || ggml_is_contiguous(attention_mask));
 
@@ -820,13 +821,13 @@ ggml_tensor* MiniCPMModel::forward(VoxCPMContext& ctx,
     const int n_tokens = input->ne[1] > 0 ? static_cast<int>(input->ne[1]) : 1;
 
     if (!positions) {
-        positions = ggml_view_1d(raw, pos_tensor_, n_tokens, 0);
+        positions = ggml_view_1d(raw, pos_tensor_, n_tokens, static_cast<size_t>(n_past) * sizeof(int32_t));
     }
 
     ggml_tensor* hidden = input;
-    ggml_tensor* causal_mask = is_causal ? create_causal_mask(raw, positions, n_tokens) : nullptr;
+    ggml_tensor* causal_mask = is_causal ? create_causal_mask(raw, positions, n_past + n_tokens) : nullptr;
     for (int i = 0; i < config_.n_layer; ++i) {
-        hidden = layer_forward(raw, hidden, positions, causal_mask, attention_mask, weights_.layers[i], kv_cache, i, n_tokens, 0, is_causal, write_kv_cache);
+        hidden = layer_forward(raw, hidden, positions, causal_mask, attention_mask, weights_.layers[i], kv_cache, i, n_tokens, n_past, is_causal, write_kv_cache);
     }
     return rms_norm(raw, hidden, weights_.norm);
 }
